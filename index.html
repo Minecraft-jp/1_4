@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>勉強アプリ - 完成版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@900&family=M+PLUS+Rounded+1c:wght@800&family=New+Rocker&family=DotGothic16&family=Noto+Sans+JP:wght@400;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --text: #1e293b;
+            --card-bg: #ffffff;
+            --font-main: 'Noto Sans JP', sans-serif;
+            --glow: transparent;
+        }
+
+        /* --- モード別スタイル設定 --- */
+        body.mode-chuunibyou {
+            background: #050005;
+            background-image: radial-gradient(circle at center, rgba(139, 0, 0, 0.2) 0%, transparent 70%), repeating-conic-gradient(from 0deg, #000 0deg 30deg, #1a0000 30deg 60deg);
+            --primary: #ff0000; --text: #ff4d4d; --card-bg: rgba(10, 0, 0, 0.9);
+            --font-main: 'New Rocker', 'Noto Serif JP', serif;
+            --glow: 0 0 20px #ff0000;
+        }
+        body.mode-cool {
+            background: #000;
+            --primary: #00ff41; --text: #00ff41; --card-bg: rgba(0, 15, 0, 0.95);
+            --font-main: 'Noto Serif JP', serif;
+            --glow: 0 0 15px #00ff41;
+        }
+        body.mode-pretty {
+            background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #ffd1ff, #a1c4fd);
+            background-size: 400% 400%;
+            animation: flow 10s ease infinite;
+            --primary: #ff4785; --text: #8e2e4f; --card-bg: rgba(255, 255, 255, 0.85);
+            --font-main: 'M PLUS Rounded 1c', sans-serif;
+        }
+        @keyframes flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        body.mode-normal { background: #f1f5f9; --primary: #3b82f6; --text: #1e293b; --card-bg: #ffffff; --font-main: 'Noto Sans JP', sans-serif; }
+        body.mode-kanji { background: #1a0f0f; --primary: #d4af37; --text: #f1d592; --card-bg: #2a1a1a; --font-main: 'Noto Serif JP', serif; }
+
+        body { color: var(--text); font-family: var(--font-main); transition: all 0.5s ease; min-height: 100vh; overflow-x: hidden; position: relative; }
+        #hacker-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; display: none; }
+        body.mode-cool #hacker-canvas { display: block; }
+        
+        .main-card { background: var(--card-bg); border: 2px solid var(--primary); backdrop-filter: blur(20px); transition: all 0.5s ease; position: relative; z-index: 10; }
+        .text-glow { text-shadow: var(--glow); }
+        .btn-mode { padding: 0.5rem 0.7rem; border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 8px; font-size: 0.7rem; font-weight: 900; transition: 0.3s; background: rgba(255, 255, 255, 0.05); }
+        .btn-mode.active { background: var(--primary); color: #000; border-color: var(--primary); box-shadow: 0 0 15px var(--primary); }
+        
+        .level-card { border: 2px solid var(--primary); background: rgba(255, 255, 255, 0.02); transition: 0.3s; cursor: pointer; }
+        .level-card:hover { transform: translateY(-5px); box-shadow: inset 0 0 20px var(--primary); }
+        .hidden { display: none; }
+        .ans-display { font-size: 3.5rem; font-weight: 900; min-height: 5rem; color: var(--primary); text-shadow: var(--glow); }
+        
+        /* 音楽インポートセクション */
+        .music-import-section { margin-top: 4rem; padding: 3rem 2rem; border-top: 2px dashed var(--primary); text-align: center; opacity: 0.8; }
+        .file-input-label { display: inline-block; padding: 1rem 2.5rem; background: var(--primary); color: white; border-radius: 1rem; font-weight: 900; cursor: pointer; transition: 0.3s; }
+        input[type="file"] { display: none; }
+
+        /* ループスイッチのデザイン */
+        .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(26px); }
+
+        .pause-overlay { position: fixed; top: 20px; right: 20px; padding: 10px 20px; background: rgba(0,0,0,0.8); color: var(--primary); border: 1px solid var(--primary); font-family: 'DotGothic16', monospace; z-index: 100; display: none; border-radius: 4px; animation: blink 1s infinite; }
+        body.is-paused .pause-overlay { display: block; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body class="mode-normal">
+
+    <canvas id="hacker-canvas"></canvas>
+    <div class="pause-overlay">SYSTEM HALTED</div>
+
+    <div class="container mx-auto max-w-xl px-4 py-8">
+        <div class="flex flex-col items-center gap-3 mb-8">
+            <div class="flex gap-2 flex-wrap justify-center">
+                <button id="btn-pretty" onclick="setMode('pretty')" class="btn-mode">かわいい</button>
+                <button id="btn-normal" onclick="setMode('normal')" class="btn-mode active">標準</button>
+                <button id="btn-cool" onclick="setMode('cool')" class="btn-mode">COOL</button>
+                <button id="btn-chuunibyou" onclick="setMode('chuunibyou')" class="btn-mode">深淵ノ刻印</button>
+                <button id="btn-kanji" onclick="setMode('kanji')" class="btn-mode">修行</button>
+            </div>
+        </div>
+
+        <div class="main-card rounded-[4rem] p-10 md:p-16">
+            <div id="start-screen" class="text-center">
+                <h1 id="ui-title" class="text-5xl md:text-7xl font-black mb-6 text-glow tracking-tighter">勉強</h1>
+                <p id="ui-desc" class="mb-12 opacity-80 text-xl font-bold tracking-widest">レベルを選択せよ</p>
+                <div class="grid gap-4">
+                    <div onclick="startDrill(1)" class="level-card p-6 rounded-[2rem] text-left">
+                        <div class="text-[0.6rem] font-black opacity-50 mb-1 uppercase tracking-widest">Lv 01</div>
+                        <div class="text-2xl font-black" id="ui-lv1-name">素因数分解</div>
+                    </div>
+                    <div onclick="startDrill(2)" class="level-card p-6 rounded-[2rem] text-left">
+                        <div class="text-[0.6rem] font-black opacity-50 mb-1 uppercase tracking-widest">Lv 02</div>
+                        <div class="text-2xl font-black" id="ui-lv2-name">正の数・負の数</div>
+                    </div>
+                    <div onclick="startDrill(3)" class="level-card p-6 rounded-[2rem] text-left">
+                        <div class="text-[0.6rem] font-black opacity-50 mb-1 uppercase tracking-widest">Lv 03</div>
+                        <div class="text-2xl font-black" id="ui-lv3-name">符号の整理</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="drill-screen" class="hidden">
+                <div class="flex justify-between items-center mb-8 border-b-2 border-current border-opacity-20 pb-4">
+                    <span id="ui-progress" class="text-xs font-black tracking-[0.2em] opacity-70">第 1 / 5 問</span>
+                    <button onclick="backToMenu()" class="text-[0.6rem] font-black opacity-50 border border-current px-2 py-1 rounded">中断</button>
+                </div>
+                <div id="question-area" class="text-center">
+                    <div id="q-text" class="text-5xl md:text-7xl font-black mb-12 tracking-tighter text-glow">...</div>
+                    <div id="ans-area" class="ans-display mb-12 invisible"><span id="q-ans">...</span></div>
+                    <div class="flex flex-col gap-4">
+                        <button id="reveal-btn" onclick="revealAnswer()" class="border-4 border-current py-5 rounded-[1.5rem] font-black text-xl hover:bg-current hover:text-black transition-all">解答を表示</button>
+                        <button id="next-btn" onclick="nextQuestion()" class="hidden text-black py-5 rounded-[1.5rem] font-black text-2xl" style="background-color: var(--primary);">次へ</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="end-screen" class="hidden text-center py-10">
+                <h2 id="ui-end-title" class="text-5xl font-black mb-6 text-glow">演習完了</h2>
+                <button onclick="backToMenu()" class="border-4 border-current px-12 py-5 rounded-[2rem] font-black hover:bg-current hover:text-black transition-all">戻る</button>
+            </div>
+        </div>
+
+        <div class="music-import-section">
+            <div id="file-status" class="mb-4 font-bold opacity-60">音楽ファイルを読み込んでください</div>
+            
+            <div class="flex flex-col items-center gap-6">
+                <label for="music-upload" class="file-input-label">ファイルを選択</label>
+                <input type="file" id="music-upload" accept="audio/*" onchange="handleFileUpload(this)">
+                
+                <div id="audio-controls" class="hidden flex flex-col items-center gap-4">
+                    <div class="flex items-center gap-3 bg-black/5 p-3 rounded-xl border border-current border-opacity-10">
+                        <span class="text-xs font-black">ループ再生</span>
+                        <label class="switch">
+                            <input type="checkbox" id="loop-toggle" checked onchange="updateLoopSettings()">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    
+                    <button id="play-pause-btn" onclick="toggleAudio()" class="border-4 border-current px-8 py-3 rounded-full font-black text-sm hover:bg-current hover:text-black transition-all">
+                        再生 / 一時停止
+                    </button>
+                </div>
+            </div>
+            
+            <audio id="global-audio" class="hidden"></audio>
+        </div>
+    </div>
+
+    <script>
+        const audio = document.getElementById('global-audio');
+        const playBtn = document.getElementById('play-pause-btn');
+        const audioControls = document.getElementById('audio-controls');
+        const loopToggle = document.getElementById('loop-toggle');
+        const fileStatus = document.getElementById('file-status');
+        const canvas = document.getElementById('hacker-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let isGlobalPaused = true;
+
+        audio.addEventListener('play', () => {
+            isGlobalPaused = false;
+            document.body.classList.remove('is-paused');
+        });
+        audio.addEventListener('pause', () => {
+            isGlobalPaused = true;
+            document.body.classList.add('is-paused');
+        });
+
+        function updateLoopSettings() {
+            audio.loop = loopToggle.checked;
+        }
+
+        function handleFileUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            audio.pause();
+            audio.removeAttribute('src');
+            audio.load();
+
+            const url = URL.createObjectURL(file);
+            audio.src = url;
+            
+            updateLoopSettings();
+            audio.currentTime = 0;
+
+            fileStatus.innerText = "導入済み: " + file.name;
+            audioControls.classList.remove('hidden');
+
+            audio.play().then(() => {
+                isGlobalPaused = false;
+                document.body.classList.remove('is-paused');
+                audio.currentTime = 0;
+            }).catch(e => {
+                isGlobalPaused = true;
+                document.body.classList.add('is-paused');
+            });
+        }
+
+        function toggleAudio() {
+            if (audio.paused) {
+                audio.play();
+            } else {
+                audio.pause();
+            }
+        }
+
+        // --- マトリックス描画ロジック ---
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+        const fontSize = 18;
+        let columns = Math.floor(width / fontSize);
+        let drops = Array(columns).fill(1);
+
+        function draw() {
+            if (!isGlobalPaused) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, width, height);
+
+                ctx.fillStyle = '#00ff41';
+                ctx.font = fontSize + 'px monospace';
+
+                for (let i = 0; i < drops.length; i++) {
+                    const text = String.fromCharCode(Math.random() * 128);
+                    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+                    if (drops[i] * fontSize > height && Math.random() > 0.975) {
+                        drops[i] = 0;
+                    }
+                    drops[i]++;
+                }
+            }
+            requestAnimationFrame(draw);
+        }
+
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            columns = Math.floor(width / fontSize);
+            drops = Array(columns).fill(1);
+        });
+
+        draw();
+
+        // --- ドリルロジック ---
+        let currentMode = 'normal';
+        let questions = [];
+        let currentIndex = 0;
+
+        const uiText = {
+            pretty: { title: 'かわいい', desc: 'どれにする？', lv1: 'すうじ分解', lv2: 'ぷらす・まいなす', lv3: 'かっこ！' },
+            normal: { title: '勉強', desc: 'レベルを選択してください', lv1: '素因数分解', lv2: '正の数・負の数', lv3: '符号の整理' },
+            cool: { title: '学習：実行', desc: '動作ランクを選択せよ', lv1: '素因数分解', lv2: '正負演算', lv3: '符号論理' },
+            chuunibyou: { title: '煉獄ノ書', desc: '深淵への扉を開く鍵を選べ', lv1: '命脈ノ切断', lv2: '血ト闇ノ相殺', lv3: '禁忌ノ三重鎖' },
+            kanji: { title: '数学修行', desc: '修行段位を選択せよ。', lv1: '素因数分解', lv2: '正負加減', lv3: '符号整理' }
+        };
+
+        function setMode(mode) {
+            document.body.className = 'mode-' + mode;
+            if (isGlobalPaused) document.body.classList.add('is-paused');
+            currentMode = mode;
+            const conf = uiText[mode];
+            document.getElementById('ui-title').innerText = conf.title;
+            document.getElementById('ui-desc').innerText = conf.desc;
+            document.getElementById('ui-lv1-name').innerText = conf.lv1;
+            document.getElementById('ui-lv2-name').innerText = conf.lv2;
+            document.getElementById('ui-lv3-name').innerText = conf.lv3;
+            document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
+            document.getElementById('btn-' + mode).classList.add('active');
+        }
+
+        function startDrill(level) {
+            questions = generateQuestions(level);
+            currentIndex = 0;
+            showScreen('drill-screen');
+            updateQuestion();
+        }
+
+        function generateQuestions(level) {
+            const list = [];
+            for(let i=0; i<5; i++) {
+                if(level === 1) {
+                    const n = [12, 18, 24, 36, 48][i];
+                    list.push({ text: n.toString(), ans: factorize(n) });
+                } else if(level === 2) {
+                    const a = Math.floor(Math.random()*20)-10;
+                    const b = Math.floor(Math.random()*20)-10;
+                    list.push({ text: `(${a}) + (${b})`, ans: a + b });
+                } else {
+                    const n = Math.floor(Math.random()*15)+1;
+                    list.push({ text: `-(-${n})`, ans: n });
+                }
+            }
+            return list;
+        }
+
+        function factorize(n) {
+            const res = { 12: "2² × 3", 18: "2 × 3²", 24: "2³ × 3", 36: "2² × 3²", 48: "2⁴ × 3" };
+            return res[n];
+        }
+
+        function updateQuestion() {
+            const q = questions[currentIndex];
+            document.getElementById('ui-progress').innerText = `第 ${currentIndex + 1} / 5 問`;
+            document.getElementById('q-text').innerText = q.text + " = ?";
+            document.getElementById('q-ans').innerText = q.ans;
+            document.getElementById('ans-area').classList.add('invisible');
+            document.getElementById('reveal-btn').classList.remove('hidden');
+            document.getElementById('next-btn').classList.add('hidden');
+        }
+
+        function revealAnswer() {
+            document.getElementById('ans-area').classList.remove('invisible');
+            document.getElementById('reveal-btn').classList.add('hidden');
+            document.getElementById('next-btn').classList.remove('hidden');
+        }
+
+        function nextQuestion() {
+            currentIndex++;
+            if (currentIndex < 5) updateQuestion();
+            else showScreen('end-screen');
+        }
+
+        function showScreen(id) {
+            ['start-screen', 'drill-screen', 'end-screen'].forEach(s => document.getElementById(s).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function backToMenu() { showScreen('start-screen'); }
+    </script>
+</body>
+</html>
